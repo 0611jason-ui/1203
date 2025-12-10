@@ -137,7 +137,7 @@
     <div class="max-w-xl mx-auto px-4 pt-8">
         
         <div id="home-page" class="page-transition hidden-page">
-            <header class="mb-8">
+            <header class="mb-6">
                 <h1 class="text-3xl font-bold text-gray-800 tracking-wider">東京六日輕旅</h1>
                 <p class="text-sm text-gray-400 mt-1">2026.01.11 - 01.16 | 歡迎回來！</p>
                 <div id="countdown-timer" class="mt-3 inline-block bg-rose-100 text-rose-600 px-3 py-1 rounded-full text-xs font-bold tracking-wide hidden">
@@ -145,7 +145,27 @@
                 </div>
             </header>
 
-            <div id="weather-card" class="app-card p-5 mb-6 bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-xl overflow-hidden relative">
+            <div id="announcement-card" class="app-card p-4 mb-6 bg-amber-50 border border-amber-200 hidden relative overflow-hidden">
+                <div class="absolute -top-6 -right-6 w-20 h-20 bg-amber-100 rounded-full opacity-50 blur-xl"></div>
+                
+                <div class="relative z-10">
+                    <div class="flex justify-between items-center mb-3">
+                        <p class="text-xs font-bold text-amber-600 uppercase tracking-wider flex items-center">
+                            <i data-lucide="megaphone" class="w-4 h-4 mr-2 animate-bounce"></i>
+                            旅途公告
+                        </p>
+                        <p class="text-[10px] text-amber-400 font-medium opacity-80 flex items-center">
+                            <i data-lucide="refresh-cw" class="w-3 h-3 mr-1"></i>
+                            <span id="announcement-time">同步中</span>
+                        </p>
+                    </div>
+                    
+                    <div id="announcement-content" class="space-y-2">
+                        </div>
+                </div>
+            </div>
+
+            <div id="weather-card" class="app-card p-5 mb-8 bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-xl overflow-hidden relative">
                 <div id="weather-content" class="relative z-10">
                     <div class="flex justify-between items-center mb-1">
                         <div class="flex items-center relative">
@@ -181,25 +201,6 @@
                         <a href="#" onclick="window.open(WEATHER_LINK, '_blank')" class="flex items-center opacity-60 hover:opacity-100">
                              詳細 <i data-lucide="external-link" class="w-3 h-3 ml-1"></i>
                         </a>
-                    </div>
-                </div>
-            </div>
-
-            <div id="announcement-card" class="app-card p-4 mb-8 bg-amber-50 border border-amber-200 hidden relative overflow-hidden">
-                <div class="absolute -top-6 -right-6 w-20 h-20 bg-amber-100 rounded-full opacity-50 blur-xl"></div>
-                
-                <div class="relative z-10">
-                    <p class="text-xs font-bold text-amber-600 uppercase tracking-wider mb-3 flex items-center">
-                        <i data-lucide="megaphone" class="w-4 h-4 mr-2 animate-bounce"></i>
-                        旅途公告
-                    </p>
-                    <div id="announcement-content" class="space-y-2">
-                        </div>
-                    <div class="mt-2 text-right">
-                        <p class="text-[10px] text-amber-400 font-medium opacity-80 flex justify-end items-center">
-                            <i data-lucide="refresh-cw" class="w-3 h-3 mr-1"></i>
-                            <span id="announcement-time">同步中...</span>
-                        </p>
                     </div>
                 </div>
             </div>
@@ -471,42 +472,37 @@
         // ----------------------------------------------------
         async function fetchAnnouncements() {
             try {
-                // 1. 抓取 CSV 檔案
-                const response = await fetch(ANNOUNCEMENT_SHEET_URL);
+                // ★★★ 關鍵修改：加上隨機時間戳記，強制瀏覽器不讀快取 ★★★
+                const timestamp = new Date().getTime();
+                const freshUrl = `${ANNOUNCEMENT_SHEET_URL}&t=${timestamp}`;
+
+                const response = await fetch(freshUrl);
                 const text = await response.text();
                 
-                // 2. 簡單解析 CSV (以換行符號分割)
-                // 假設第一欄為公告內容，且第一列為標題 (忽略第一列)
                 const rows = text.split(/\r?\n/);
                 
                 const container = document.getElementById('announcement-content');
                 const card = document.getElementById('announcement-card');
+                
+                // ★★★ 關鍵修改：先清空內容，避免重複堆疊 ★★★
                 container.innerHTML = '';
                 
-                let hasContent = false;
+                let hasValidContent = false;
 
                 // 從第 1 列開始 (跳過第 0 列標題)
                 for (let i = 1; i < rows.length; i++) {
-                    // 處理 CSV 的逗號與引號問題 (簡易版)
-                    // 如果這行是空的，跳過
                     if (!rows[i].trim()) continue;
 
-                    // 取得第一欄的文字 (簡單做: 取第一個逗號前的文字，或整行如果沒逗號)
-                    // 進階做: 如果有引號包住，要去掉引號
                     let message = "";
-                    
-                    // 簡易 CSV Parser for Column A
                     const rowText = rows[i];
                     if (rowText.startsWith('"')) {
-                        // 有引號包住 (例如: "今天,下雨")
                         const endQuoteIdx = rowText.indexOf('"', 1);
                         if (endQuoteIdx !== -1) {
                             message = rowText.substring(1, endQuoteIdx).replace(/""/g, '"');
                         } else {
-                            message = rowText; // 格式怪怪的，直接顯示
+                            message = rowText; 
                         }
                     } else {
-                        // 沒有引號，取第一個逗號前的內容
                         const commaIdx = rowText.indexOf(',');
                         if (commaIdx !== -1) {
                             message = rowText.substring(0, commaIdx);
@@ -514,8 +510,15 @@
                             message = rowText;
                         }
                     }
+                    
+                    message = message.trim();
 
-                    if (message && message.trim()) {
+                    // ★★★ 關鍵修改：如果內容是 "x" 或 "X"，視為無效內容並跳過 ★★★
+                    if (message.toLowerCase() === 'x') {
+                        continue; 
+                    }
+
+                    if (message) {
                         const msgHtml = `
                             <div class="flex items-start text-sm font-medium text-gray-700 bg-white/60 p-2.5 rounded-lg border border-amber-200/50 shadow-sm">
                                 <i data-lucide="info" class="w-4 h-4 text-amber-500 mr-2 flex-shrink-0 mt-0.5"></i>
@@ -523,15 +526,15 @@
                             </div>
                         `;
                         container.insertAdjacentHTML('beforeend', msgHtml);
-                        hasContent = true;
+                        hasValidContent = true;
                     }
                 }
 
-                if (hasContent) {
+                // ★★★ 關鍵修改：如果有有效內容才顯示，否則隱藏 ★★★
+                if (hasValidContent) {
                     card.classList.remove('hidden');
-                    card.classList.add('announcement-active'); // 加入呼吸燈效果
+                    card.classList.add('announcement-active');
                     
-                    // 更新時間
                     const now = new Date();
                     const timeStr = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
                     document.getElementById('announcement-time').innerText = timeStr + " 更新";
@@ -539,12 +542,10 @@
                     card.classList.add('hidden');
                 }
                 
-                // 重新渲染圖示
                 if (window.lucide) window.lucide.createIcons();
 
             } catch (e) {
                 console.error("無法抓取公告:", e);
-                // 失敗時隱藏卡片，不影響使用者體驗
                 document.getElementById('announcement-card').classList.add('hidden');
             }
         }
